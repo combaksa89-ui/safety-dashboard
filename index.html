@@ -110,7 +110,7 @@
       gap: 5px;
     }
 
-    /* 레이아웃 (아이패드 2단 분할) */
+    /* 아이패드 2단 분할 레이아웃 */
     .dashboard-body {
       display: flex;
       flex: 1;
@@ -378,7 +378,7 @@
     <!-- 좌측 입력 패널 -->
     <div class="panel-input">
       
-      <!-- 사진 첨부 공통 영역 (카메라/보관함) -->
+      <!-- 사진 첨부 공통 영역 -->
       <div class="form-group">
         <label>현장 사진 첨부 (카메라 촬영 또는 보관함 선택)</label>
         <div class="image-dropzone" onclick="document.getElementById('fileInput').click()">
@@ -393,7 +393,7 @@
         </div>
       </div>
 
-      <!-- 동적 입력 폼 (모드에 따라 전환) -->
+      <!-- 동적 입력 폼 -->
       <div id="dynamicForm"></div>
 
       <button class="btn-submit" id="btnSubmit" onclick="runAnalysis()">실행</button>
@@ -408,9 +408,9 @@
         </div>
       </div>
 
-      <!-- 추가 심층 질의 (멀티턴) -->
+      <!-- 추가 심층 질의 -->
       <div class="chat-section">
-        <input type="text" id="chatInput" placeholder="분석 결과에 대해 추가로 궁금한 점을 질문하세요 (예: 제안된 인터록 기준 구체화)" onkeydown="if(event.key==='Enter') sendFollowUp()">
+        <input type="text" id="chatInput" placeholder="분석 결과에 대해 추가로 질문하세요 (예: 제안된 인터록 기준 구체화)" onkeydown="if(event.key==='Enter') sendFollowUp()">
         <button class="btn-action" style="background:var(--accent); color:#0b0f19; font-weight:bold;" onclick="sendFollowUp()">질문 전송</button>
       </div>
     </div>
@@ -438,7 +438,7 @@
     let currentImageMime = null;
     let conversationHistory = [];
 
-    // 모드별 폼 정의
+    // 모드별 폼 템플릿
     const formTemplates = {
       accident: `
         <div class="form-group">
@@ -522,7 +522,7 @@
       document.getElementById('dynamicForm').innerHTML = formTemplates[currentMode];
     }
 
-    /* 이미지 처리 (카메라 및 앨범) */
+    /* 이미지 처리 */
     function handleImage(input) {
       const file = input.files[0];
       if (!file) return;
@@ -594,7 +594,7 @@
       recognition.start();
     }
 
-    /* 프롬프트 조립 및 실행 */
+    /* 분석 요청 (Gemini 3.8 Flash 적용) */
     async function runAnalysis() {
       const apiKey = localStorage.getItem(STORAGE_KEY);
       if (!apiKey) {
@@ -695,7 +695,6 @@
         userContext = notes ? `[추가 요구사항] ${notes}` : `사진에 찍힌 모든 시각적 정보를 시각장애인 낭독 수준으로 상세히 해설해 주세요.`;
       }
 
-      // API 호출
       const submitBtn = document.getElementById('btnSubmit');
       const reportArea = document.getElementById('reportArea');
 
@@ -720,7 +719,8 @@
           generationConfig: { temperature: 0.2 }
         };
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        // 최신 gemini-3.8-flash 엔드포인트 호출
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -732,7 +732,6 @@
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
           reportArea.innerHTML = `<div class="markdown-body">${marked.parse(reply)}</div>`;
-          // 대화 히스토리 초기화 및 저장
           conversationHistory = [
             { role: 'user', parts: parts },
             { role: 'model', parts: [{ text: reply }] }
@@ -750,7 +749,7 @@
       }
     }
 
-    /* 후속 연속 질의 */
+    /* 후속 연속 질의 (Gemini 3.8 Flash 적용) */
     async function sendFollowUp() {
       const apiKey = localStorage.getItem(STORAGE_KEY);
       const input = document.getElementById('chatInput');
@@ -777,7 +776,8 @@
       });
 
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        // 최신 gemini-3.8-flash 엔드포인트 호출
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
