@@ -66,7 +66,6 @@
       font-weight: 700;
     }
 
-    /* 모드 전환 탭 */
     .mode-tabs {
       display: flex;
       background: var(--bg-input);
@@ -110,7 +109,6 @@
       gap: 5px;
     }
 
-    /* 아이패드 2단 분할 레이아웃 */
     .dashboard-body {
       display: flex;
       flex: 1;
@@ -194,7 +192,6 @@
       line-height: 1.5;
     }
 
-    /* 이미지 업로드 영역 */
     .image-dropzone {
       border: 2px dashed var(--border);
       border-radius: 8px;
@@ -250,7 +247,6 @@
       cursor: not-allowed;
     }
 
-    /* 결과창 및 후속 질의 */
     .report-card {
       flex: 1;
       background-color: var(--bg-card);
@@ -274,7 +270,6 @@
       flex: 1;
     }
 
-    /* 마크다운 결과 서식 */
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
       color: var(--accent);
       margin-top: 18px;
@@ -300,7 +295,6 @@
       color: #7dd3fc;
     }
 
-    /* 모달 */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -320,7 +314,6 @@
       border: 1px solid var(--border);
     }
 
-    /* 인쇄 전용 스타일 */
     @media print {
       body {
         background: #fff !important;
@@ -354,13 +347,11 @@
 </head>
 <body>
 
-  <!-- 상단 내비게이션 바 -->
   <header>
     <div class="brand">
       <span>🛡️ AI 방재·안전 종합센터</span>
     </div>
 
-    <!-- 3대 모드 선택 -->
     <div class="mode-tabs">
       <button class="tab-btn active" onclick="switchMode('accident')">🚨 사고 분석 & 재발방지</button>
       <button class="tab-btn" onclick="switchMode('hazard')">⚠️ 잠재 위험점 발굴</button>
@@ -373,12 +364,9 @@
     </div>
   </header>
 
-  <!-- 대시보드 본체 -->
   <div class="dashboard-body">
-    <!-- 좌측 입력 패널 -->
     <div class="panel-input">
       
-      <!-- 사진 첨부 공통 영역 -->
       <div class="form-group">
         <label>현장 사진 첨부 (카메라 촬영 또는 보관함 선택)</label>
         <div class="image-dropzone" onclick="document.getElementById('fileInput').click()">
@@ -393,13 +381,11 @@
         </div>
       </div>
 
-      <!-- 동적 입력 폼 -->
       <div id="dynamicForm"></div>
 
       <button class="btn-submit" id="btnSubmit" onclick="runAnalysis()">실행</button>
     </div>
 
-    <!-- 우측 분석 리포트 및 후속 질의 패널 -->
     <div class="panel-output">
       <div class="report-card" id="reportArea">
         <div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-muted); text-align:center;">
@@ -408,7 +394,6 @@
         </div>
       </div>
 
-      <!-- 추가 심층 질의 -->
       <div class="chat-section">
         <input type="text" id="chatInput" placeholder="분석 결과에 대해 추가로 질문하세요 (예: 제안된 인터록 기준 구체화)" onkeydown="if(event.key==='Enter') sendFollowUp()">
         <button class="btn-action" style="background:var(--accent); color:#0b0f19; font-weight:bold;" onclick="sendFollowUp()">질문 전송</button>
@@ -416,7 +401,6 @@
     </div>
   </div>
 
-  <!-- API 설정 모달 -->
   <div class="modal-overlay" id="settingsModal">
     <div class="modal-content">
       <h3 style="margin-bottom:12px;">Google Gemini API 키 등록</h3>
@@ -438,7 +422,6 @@
     let currentImageMime = null;
     let conversationHistory = [];
 
-    // 모드별 폼 템플릿
     const formTemplates = {
       accident: `
         <div class="form-group">
@@ -522,7 +505,6 @@
       document.getElementById('dynamicForm').innerHTML = formTemplates[currentMode];
     }
 
-    /* 이미지 처리 */
     function handleImage(input) {
       const file = input.files[0];
       if (!file) return;
@@ -548,7 +530,6 @@
       document.getElementById('uploadHint').style.display = 'inline';
     }
 
-    /* 음성 인식 (STT) */
     let recognition = null;
     function toggleVoice(targetId, btn) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -594,7 +575,65 @@
       recognition.start();
     }
 
-    /* 분석 요청 (Gemini 3.8 Flash 적용) */
+    /**
+     * [핵심 엔진] 구글 서버 혼잡(503 High Demand) 시 자동으로 대체 모델로 즉시 우회
+     */
+    async function requestGeminiWithFallback(payload, apiKey, onStatusChange) {
+      // 1순위 모델 과부하 시 순차적으로 여유 있는 엔진으로 자동 전환
+      const candidateModels = [
+        'gemini-3.8-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash'
+      ];
+
+      let lastError = null;
+
+      for (let i = 0; i < candidateModels.length; i++) {
+        const modelName = candidateModels[i];
+        try {
+          if (i > 0 && onStatusChange) {
+            onStatusChange(`⚠️ 서버 혼잡 감지: 대체 엔진(${modelName})으로 자동 우회하여 분석을 완료합니다...`);
+          }
+
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await response.json();
+
+          if (data.error) {
+            const msg = data.error.message || '';
+            // 서버 혼잡(503 / high demand) 또는 일시적 오류 시 다음 모델 시도
+            if (msg.includes('high demand') || msg.includes('overloaded') || data.error.code === 503 || data.error.code === 404) {
+              console.warn(`[Failover] ${modelName} 혼잡 발생. 다음 모델로 자동 전환합니다.`);
+              lastError = new Error(msg);
+              continue;
+            } else {
+              throw new Error(msg);
+            }
+          }
+
+          const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (answer) {
+            return answer;
+          } else {
+            throw new Error('응답 결과가 비어 있습니다.');
+          }
+
+        } catch (err) {
+          lastError = err;
+          if (i < candidateModels.length - 1) {
+            await new Promise(res => setTimeout(res, 800)); // 0.8초 후 즉시 다음 모델 시도
+          }
+        }
+      }
+
+      throw lastError || new Error('현재 모든 구글 AI 서버가 매우 혼잡합니다. 잠시 후 다시 시도해 주세요.');
+    }
+
     async function runAnalysis() {
       const apiKey = localStorage.getItem(STORAGE_KEY);
       if (!apiKey) {
@@ -700,7 +739,7 @@
 
       submitBtn.disabled = true;
       submitBtn.innerText = '⏳ AI 분석 및 보고서 작성 중...';
-      reportArea.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">지능형 비전 및 방재 안전 모델이 분석을 수행하고 있습니다...</div>';
+      reportArea.innerHTML = '<div id="loadingStatus" style="text-align:center; padding:40px; color:var(--text-muted);">지능형 비전 및 방재 안전 모델이 분석을 수행하고 있습니다...</div>';
 
       try {
         const parts = [{ text: systemPrompt + "\n\n" + userContext }];
@@ -715,30 +754,19 @@
         }
 
         const payload = {
-          contents: [{ role: 'user', parts: parts }],
-          generationConfig: { temperature: 0.2 }
+          contents: [{ role: 'user', parts: parts }]
         };
 
-        // 최신 gemini-3.8-flash 엔드포인트 호출
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+        const reply = await requestGeminiWithFallback(payload, apiKey, (statusText) => {
+          const statusDiv = document.getElementById('loadingStatus');
+          if (statusDiv) statusDiv.innerText = statusText;
         });
 
-        const data = await res.json();
-        if (data.error) throw new Error(data.error.message);
-
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (reply) {
-          reportArea.innerHTML = `<div class="markdown-body">${marked.parse(reply)}</div>`;
-          conversationHistory = [
-            { role: 'user', parts: parts },
-            { role: 'model', parts: [{ text: reply }] }
-          ];
-        } else {
-          reportArea.innerHTML = '<p style="color:var(--danger)">분석 결과를 생성하지 못했습니다.</p>';
-        }
+        reportArea.innerHTML = `<div class="markdown-body">${marked.parse(reply)}</div>`;
+        conversationHistory = [
+          { role: 'user', parts: parts },
+          { role: 'model', parts: [{ text: reply }] }
+        ];
 
       } catch (err) {
         alert('분석 오류: ' + err.message);
@@ -749,7 +777,6 @@
       }
     }
 
-    /* 후속 연속 질의 (Gemini 3.8 Flash 적용) */
     async function sendFollowUp() {
       const apiKey = localStorage.getItem(STORAGE_KEY);
       const input = document.getElementById('chatInput');
@@ -776,35 +803,22 @@
       });
 
       try {
-        // 최신 gemini-3.8-flash 엔드포인트 호출
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: conversationHistory,
-            generationConfig: { temperature: 0.3 }
-          })
-        });
-
-        const data = await res.json();
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const payload = { contents: conversationHistory };
+        const reply = await requestGeminiWithFallback(payload, apiKey);
+        
         document.getElementById('followupLoading')?.remove();
-
-        if (reply) {
-          reportArea.innerHTML += `<div class="markdown-body" style="margin-top:12px;">${marked.parse(reply)}</div>`;
-          conversationHistory.push({
-            role: 'model',
-            parts: [{ text: reply }]
-          });
-          reportArea.scrollTop = reportArea.scrollHeight;
-        }
+        reportArea.innerHTML += `<div class="markdown-body" style="margin-top:12px;">${marked.parse(reply)}</div>`;
+        conversationHistory.push({
+          role: 'model',
+          parts: [{ text: reply }]
+        });
+        reportArea.scrollTop = reportArea.scrollHeight;
       } catch (err) {
         document.getElementById('followupLoading')?.remove();
         alert('후속 질의 오류: ' + err.message);
       }
     }
 
-    /* 설정 모달 */
     function openSettings() {
       document.getElementById('apiKeyInput').value = localStorage.getItem(STORAGE_KEY) || '';
       document.getElementById('settingsModal').style.display = 'flex';
